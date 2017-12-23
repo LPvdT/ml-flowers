@@ -1,0 +1,218 @@
+---
+title: "Machine Learning & Iris Flower Data"
+author: "LvdT"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This project will investigate _Fisher's Iris flower data set_ through various machine learning algorithms, such as linear discriminant analysis, classification and regression trees, k-nearest neighbours, support vector machine and random forest. We will attempt to train a model to classify the flower's species correctly.
+
+# Packages and data import
+
+The required packages and imports are as follows:
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE}
+library(caret)
+library(lattice)
+library(ggplot2)
+source("QuickCairoExport.R")
+```
+
+The data is imported as follows:
+
+```{r dataImport, echo=TRUE, message=FALSE, warning=FALSE}
+hardsource = FALSE
+
+if (hardsource == TRUE) {
+  source <- "iris.csv"
+  dataset <- read.csv(source, header = FALSE)
+  colnames(dataset) <- c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width", "Species")
+}
+
+dataset <- iris
+```
+
+# Partitioning
+
+In preparation for the machine learning algorithms later on, the data is split into test and validation partitions here.
+
+```{r Partitioning, echo=TRUE, message=FALSE, warning=FALSE}
+# Create validation set
+validation_index <- createDataPartition(dataset$Species, p = 0.8, list = FALSE)
+validation <- dataset[-validation_index, ]
+
+# Create testing set
+dataset <- dataset[validation_index, ]
+```
+
+# Basic data exploration
+
+This section will briefly explore the data set.
+
+```{r EDA1, echo=TRUE}
+dim(dataset)
+sapply(dataset, class)
+head(dataset, n = 8)
+```
+
+### The species variable
+
+As can be seen from above, the training data set contains 120 observations of 5 variables. The first four of these are numeric. The last one, flower species, is categorical. The different categories for this factorised variable can be seen below, along with the distribution among different types of species within the variable.
+
+```{r EDA2, echo=TRUE}
+levels(dataset$Species)
+
+# Class distribution
+percentage <- prop.table(table(dataset$Species)) * 100
+frequency <- table(dataset$Species)
+cbind(frequency, percentage)
+```
+
+General summary statistics for the training data set are as follows:
+
+```{r, echo=TRUE}
+summary(dataset)
+```
+
+# Visualisation
+
+Graphics often tell the story a lot more smoothly than numbers alone. This section will present some visualisations. However, first we need to separate the factorised variable from the numeric ones.
+
+```{r splitVar, echo=TRUE}
+# Split by class; numeric and factors
+x <- dataset[, 1:4]
+y <- dataset[, 5]
+```
+
+### Boxplots
+
+Univariate boxplots for the numerical variables:
+
+```{r Boxplots, echo=TRUE}
+par(mfrow = c(1, 4))
+  for(i in 1:4) {
+    boxplot(x[, i], main = names(dataset)[i])
+}
+```
+
+### Barplot
+
+Univariate barplot for the factorised variable:
+
+```{r Barplot, echo=TRUE}
+par(mfrow = c(1, 1))
+plot(y)
+```
+
+## Multivariate plots
+
+### Multivariate scatterplot
+
+The following scatterplot matrix clearly shows some relationships between predictor variables (along axes) and classes (the species by colours).
+
+```{r mScatter, echo=TRUE}
+# pairs(dataset[ ,-5], col = dataset$Species)    
+featurePlot(x = x, y = y, plot = "pairs")
+```
+
+### Multivariate boxplot
+
+This boxplot shows the distribution of attributes per class level. There is a clear distinction per predictor and class. There are also some outlier values.
+
+```{r mBox, echo=TRUE}
+featurePlot(x = x, y = y, plot = "box")
+```
+
+### Probability density plots
+
+This plot shows the probability density functions for the different attributes per class level. This gives us an impression of the probability distribution.
+
+```{r probDens, echo=TRUE}
+scaleconfig <- list(x = list(relation = "free"), y = list(relation = "free"))
+featurePlot(x = x, y = y, plot = "density", scales = scaleconfig)
+```
+
+# Algorithm fitting and evaluation
+
+This section will fit the algorithms to the training data. The algorithms employed are _linear discriminant analysis_ (LDA), _classification and regression trees_ (CART), _k-nearest neighbours_ (kNN), _support vector machine_ (SVM) and _random forest_ (RF).
+
+### Training models
+
+First, the control harness for the training of the models is defined, along with an evaluation metric. We use _accuracy_ to evaluate model performance: the percentage of correct predictions relative to total training data. 
+
+```{r algFit, echo=TRUE}
+# Test harness
+control <- trainControl(method = "cv", number = 10)
+metric <- "Accuracy"
+
+# Linear Discriminant Analysis (LDA)
+set.seed(813675)
+fit.lda <- train(Species~., data = dataset, method = "lda", metric = metric, trControl = control)
+
+# Classification and Regression Trees (CART)
+set.seed(813675)
+fit.cart <- train(Species~., data = dataset, method = "rpart", metric = metric, trControl = control)
+
+# k-Nearest Neighbours (kNN)
+set.seed(813675)
+fit.knn <- train(Species~., data = dataset, method = "knn", metric = metric, trControl = control)
+
+# Support Vector Machine (SVM) with linear kernel
+set.seed(813675)
+fit.svm <- train(Species~., data = dataset, method = "svmRadial", metric = metric, trControl = control)
+
+# Random Forest (RF)
+set.seed(813675)
+fit.rf <- train(Species~., data = dataset, method = "rf", metric = metric, trControl = control)
+```
+
+### Model results
+
+Next, we extract the results from the fitting process, coerce the results into a table and display it. Moreover, we visualise the results because there is a population of accuracy metrics due to the _n = 10_ cross validation.
+
+From both the table, as well as the visualisation, it can be seen that the **LDA algorithm** has yielded the best results; highest respective accuracy and kappa with the lowest relative volatility.
+
+```{r sumAcc, echo=TRUE}
+## Summarise accuracy measures
+results <- resamples(list(lda = fit.lda, cart = fit.cart, knn = fit.knn, svm = fit.svm, rf = fit.rf))
+
+# Tabulate
+summary(results)
+
+# Visualise
+dotplot(results)
+```
+
+### Best fit
+
+The specific results for the LDA fitted model are as follows:
+
+```{r bestFit, echo=TRUE}
+# Print best algorithm's results
+print(fit.lda)
+```
+
+# Predictions and the test data
+
+Subsequently, we want to make predictions using the best model for the particular data set; the LDA algorithm. To do so, the trained LDA model is applied to the test data set (validation set).
+
+```{r Pred, echo=TRUE}
+## Predictions
+predictions <- predict(fit.lda, validation)
+```
+
+### Confusion matrix
+
+The results are now summarised in a confusion matrix. As can be seen in the tabulated results, the predictions in the test set have been _96.67%_ accurate. The _Setosa_ class has been predicted with perfect accuracy. One _versicolor_ has been mistakenly predicted as _verginica_.  
+
+```{r confMatrix, echo=TRUE}
+confusionMatrix(predictions, validation$Species)
+```
+
